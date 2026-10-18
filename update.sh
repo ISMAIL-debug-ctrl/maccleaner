@@ -65,6 +65,7 @@ fi
 # App: no password needed.
 pkill -x MacCleaner 2>/dev/null || true
 sleep 1
-rm -rf /Applications/MacCleaner.app && cp -R build/MacCleaner.app /Applications/
+# Replace in place (no delete): deleting the bundle makes macOS forget its Full Disk Access.
+rsync -a --delete build/MacCleaner.app/ /Applications/MacCleaner.app/
 open /Applications/MacCleaner.app
 echo "MacCleaner updated to $(cat VERSION) ($(git rev-parse --short HEAD 2>/dev/null || echo local))"
