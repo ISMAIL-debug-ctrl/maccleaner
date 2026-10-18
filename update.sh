@@ -19,6 +19,7 @@ if [[ $ARGS != *" --no-pull "* ]]; then
   git merge --ff-only --quiet "$LATEST"
 fi
 
+Tools/signing-identity.sh || echo "Could not create the local signing identity, using an ad-hoc signature"
 ./build.sh
 
 # Root helper: reinstall only when its sources changed (no password prompt for UI-only updates).

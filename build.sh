@@ -17,6 +17,11 @@ PB=/usr/libexec/PlistBuddy
 $PB -c "Set :CFBundleShortVersionString $(cat VERSION)" $APP/Info.plist
 $PB -c "Set :CFBundleVersion $(git rev-list --count HEAD 2>/dev/null || echo 1)" $APP/Info.plist
 $PB -c "Add :MacCleanerRepoPath string $PWD" $APP/Info.plist
-codesign --force --options runtime --sign - build/MacCleaner.app
-codesign --force --options runtime --sign - --identifier com.ismailx.maccleaner.helper build/com.ismailx.maccleaner.helper
+# Sign with the local identity from Tools/signing-identity.sh when present (Full Disk Access then
+# survives rebuilds); otherwise ad-hoc.
+SIGN=$(security find-certificate -c "MacCleaner Local Signing" -Z "$HOME/Library/Keychains/login.keychain-db" 2>/dev/null \
+  | awk '/^SHA-1 hash:/ {print $3; exit}')
+SIGN=${SIGN:--}
+codesign --force --options runtime --sign "$SIGN" build/MacCleaner.app
+codesign --force --options runtime --sign "$SIGN" --identifier com.ismailx.maccleaner.helper build/com.ismailx.maccleaner.helper
 echo "Built: build/MacCleaner.app + build/com.ismailx.maccleaner.helper"

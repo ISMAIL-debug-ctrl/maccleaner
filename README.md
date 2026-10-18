@@ -58,7 +58,8 @@ cd maccleaner
 ./install.sh
 ```
 - The installer builds the app, copies it to `/Applications`, and asks for your password **once** to install the small root helper. You can skip the helper with `./install.sh --no-helper`. Maintenance tasks then ask for your password each time, and system-wide junk is skipped.
-- Then open **System Settings ▸ Privacy & Security ▸ Full Disk Access** and turn on **MacCleaner**. It needs this to see the Trash, Mail and Safari data. After an update you may need to turn it off and on again, because the app is built locally and has no paid Apple signature.
+- Then open **System Settings ▸ Privacy & Security ▸ Full Disk Access** and turn on **MacCleaner**. It needs this to see the Trash, Mail and Safari data. You only do this once: updates keep the permission.
+- **Why it keeps the permission:** the installer creates a free, self-signed signing certificate called **MacCleaner Local Signing** in your login keychain (only once, only on your Mac) and signs every build with it, so macOS recognises each update as the same app. The private key is made on your Mac, can't be exported, and only `codesign` can use it. It is not marked as trusted and is never uploaded or committed. If it can't be created, the app is signed ad-hoc as before, and you may need to turn Full Disk Access off and on after each update. To remove it: Keychain Access ▸ login ▸ My Certificates ▸ MacCleaner Local Signing ▸ Delete.
 - To open MacCleaner at login (menu bar only), use **Settings ▸ Open at login** in the app. It is then listed in System Settings ▸ General ▸ Login Items.
 - Closing the window keeps MacCleaner in the menu bar (the Dock icon hides). Quit it from the menu bar panel.
 
@@ -67,7 +68,7 @@ When an update is out, the app shows **Update now** (in Settings and in the menu
 ```bash
 ./update.sh
 ```
-Updates only install published releases (`v*` tags on `main`). Your password is only asked again when the helper itself changed.
+Updates only install published releases (`v*` tags on `main`). Your password is only asked again when the helper itself changed. Updating from 1.0.1 or earlier switches the app to the local signing certificate, so turn Full Disk Access off and on **one last time** after that update.
 
 ## Uninstall
 ```bash
@@ -136,7 +137,8 @@ cd maccleaner
 ./install.sh
 ```
 - يطلب الباسوورد **مرة وحدة** عشان يركّب المساعد (helper). إذا ما تبيه: `./install.sh --no-helper`.
-- بعدها روح **إعدادات النظام ▸ الخصوصية والأمان ▸ الوصول الكامل للقرص** وفعّل **MacCleaner**.
+- بعدها روح **إعدادات النظام ▸ الخصوصية والأمان ▸ الوصول الكامل للقرص** وفعّل **MacCleaner**. مرة وحدة بس، والتحديثات ما تلغيها.
+- عشان كذا المثبّت يسوي شهادة توقيع مجانية على جهازك اسمها **MacCleaner Local Signing** (في سلسلة المفاتيح login، مرة وحدة). المفتاح ما يطلع من جهازك وما ينرفع لأي مكان. إذا حدّثت من نسخة 1.0.1 أو أقدم، طفّ الوصول الكامل للقرص وشغّله **آخر مرة**.
 
 ### التحديث
 لما ينزل تحديث يطلع لك زر **Update now** داخل البرنامج، أو شغّل `./update.sh`. الباسوورد ما ينطلب إلا إذا تغيّر المساعد نفسه.
