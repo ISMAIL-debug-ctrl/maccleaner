@@ -43,6 +43,10 @@ enum JunkScanner {
         return browserKeep.firstMatch(in: n, range: NSRange(n.startIndex..., in: n)) != nil
     }
 
+    /// Caches macOS protects (SIP/TCC); listing them would only produce "couldn't remove".
+    static let systemLocked: Set<String> = ["CloudKit", "FamilyCircle", "com.apple.HomeKit", "com.apple.ap.adprivacyd",
+                                            "com.apple.homed", "com.apple.containermanagerd", "com.apple.findmy.fmipcore"]
+
     struct Folder { let rel: String; let label: String; let filterBrowsers: Bool }
 
     static func scan(home: URL, options: JunkOptions) -> [JunkCategory] {
@@ -99,7 +103,7 @@ enum JunkScanner {
             let root = home.appendingPathComponent(f.rel)
             guard Safety(home: home).isRealDirectory(root.path),
                   let names = try? fm.contentsOfDirectory(atPath: root.path) else { continue }
-            for name in names where name != ".DS_Store" {
+            for name in names where name != ".DS_Store" && !systemLocked.contains(name) {
                 if f.filterBrowsers && isBrowser(name) { continue }
                 let bare = name.replacingOccurrences(of: ".savedState", with: "")
                 let isRunning = options.skipRunningApps && options.runningBundleIDs.contains(bare)
