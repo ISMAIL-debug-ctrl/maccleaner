@@ -68,7 +68,7 @@ When an update is out, the app shows **Update now** (in Settings and in the menu
 ```bash
 ./update.sh
 ```
-Updates only install published releases (`v*` tags on `main`). Your password is only asked again when the helper itself changed. Updating from 1.0.1 or earlier switches the app to the local signing certificate, so turn Full Disk Access off and on **one last time** after that update.
+Updates only install published releases (`v*` tags on `main`). Your password is only asked again when the helper itself changed. Updating from 1.1 or earlier switches the app to the local signing certificate, so turn Full Disk Access off and on **one last time** after that update.
 
 ## Uninstall
 ```bash
@@ -138,7 +138,7 @@ cd maccleaner
 ```
 - يطلب الباسوورد **مرة وحدة** عشان يركّب المساعد (helper). إذا ما تبيه: `./install.sh --no-helper`.
 - بعدها روح **إعدادات النظام ▸ الخصوصية والأمان ▸ الوصول الكامل للقرص** وفعّل **MacCleaner**. مرة وحدة بس، والتحديثات ما تلغيها.
-- عشان كذا المثبّت يسوي شهادة توقيع مجانية على جهازك اسمها **MacCleaner Local Signing** (في سلسلة المفاتيح login، مرة وحدة). المفتاح ما يطلع من جهازك وما ينرفع لأي مكان. إذا حدّثت من نسخة 1.0.1 أو أقدم، طفّ الوصول الكامل للقرص وشغّله **آخر مرة**.
+- عشان كذا المثبّت يسوي شهادة توقيع مجانية على جهازك اسمها **MacCleaner Local Signing** (في سلسلة المفاتيح login، مرة وحدة). المفتاح ما يطلع من جهازك وما ينرفع لأي مكان. إذا حدّثت من نسخة 1.1 أو أقدم، طفّ الوصول الكامل للقرص وشغّله **آخر مرة**.
 
 ### التحديث
 لما ينزل تحديث يطلع لك زر **Update now** داخل البرنامج، أو شغّل `./update.sh`. الباسوورد ما ينطلب إلا إذا تغيّر المساعد نفسه.
