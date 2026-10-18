@@ -4,14 +4,19 @@ import SwiftUI
 
 struct MemoryBar: View {
     let m: MemoryStats
+    var captions = false
     var body: some View {
         let total = Double(max(m.total, 1))
-        let parts: [(String, UInt64, Color)] = [("Apps", m.app, .blue), ("Wired", m.wired, .orange),
-                                                ("Compressed", m.compressed, .purple), ("Cached files", m.cached, .green.opacity(0.6))]
+        let parts: [(String, UInt64, Color, String)] = [
+            ("Apps", m.app, .blue, "what open apps hold in RAM"),
+            ("Wired", m.wired, .orange, "macOS itself — can't be freed"),
+            ("Compressed", m.compressed, .purple, "app memory squeezed to avoid swap"),
+            ("Cached files", m.cached, .green.opacity(0.6), "macOS frees this by itself when needed"),
+        ]
         VStack(alignment: .leading, spacing: 6) {
             GeometryReader { g in
                 HStack(spacing: 1) {
-                    ForEach(parts, id: \.0) { _, v, c in
+                    ForEach(parts, id: \.0) { _, v, c, _ in
                         Rectangle().fill(c).frame(width: max(0, g.size.width * Double(v) / total))
                     }
                     Spacer(minLength: 0)
@@ -20,9 +25,15 @@ struct MemoryBar: View {
                 .clipShape(RoundedRectangle(cornerRadius: 5))
             }
             .frame(height: 14)
-            HStack(spacing: 12) {
-                ForEach(parts, id: \.0) { n, v, c in
-                    HStack(spacing: 4) { Circle().fill(c).frame(width: 8, height: 8); Text("\(n) \(Fmt.mem(v))").font(.caption) }
+            LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], spacing: 4) {
+                ForEach(parts, id: \.0) { n, v, c, cap in
+                    HStack(alignment: .top, spacing: 5) {
+                        Circle().fill(c).frame(width: 8, height: 8).padding(.top, 4)
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text("\(n) \(Fmt.mem(v))").font(.caption).fixedSize()
+                            if captions { Text(cap).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+                        }
+                    }
                 }
             }
         }
@@ -39,79 +50,126 @@ struct PressureBadge: View {
     }
 }
 
+/// The big "Free RAM" action with its honest before → after result.
+struct FreeRAMBox: View {
+    @EnvironmentObject var monitor: Monitor
+    @EnvironmentObject var prefs: Prefs
+    var compact = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Button { monitor.freeRAM() } label: {
+                    Label(monitor.freeing ? "Freeing…" : "Free RAM", systemImage: "wind").frame(minWidth: compact ? 0 : 120)
+                }
+                .buttonStyle(.borderedProminent).controlSize(compact ? .regular : .large).disabled(monitor.freeing)
+                if !compact {
+                    Toggle("Also stop background services (Photos/Spotlight analysis — they restart later)", isOn: $prefs.stopBackgroundHogs)
+                        .toggleStyle(.checkbox).font(.callout)
+                }
+            }
+            if let r = monitor.lastFree {
+                Text(r).font(.caption).monospacedDigit().foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
 struct MemoryView: View {
     @EnvironmentObject var monitor: Monitor
-    @EnvironmentObject var helper: HelperClient
-    @State private var before: MemoryStats?
-    @State private var purgeNote: String?
+    @EnvironmentObject var prefs: Prefs
+    @State private var picked: Set<pid_t> = []
 
     var advice: String {
         let m = monitor.mem
-        let swapGB = Double(m.swapUsed) / 1_073_741_824
-        if m.pressure >= 4 {
-            return "Your Mac is short on memory right now and is moving app data to disk (swap \(String(format: "%.1f", swapGB)) GB). That is the slowness you feel. Quitting one or two of the apps below is the only thing that really helps."
-        } else if m.pressure >= 2 || swapGB > 2 {
-            return "Memory is tight: macOS is compressing and swapping (\(String(format: "%.1f", swapGB)) GB on disk). Close apps you aren't using — browsers with many tabs and Electron apps (Notion, Slack, Discord…) are usually the biggest."
-        }
-        return "All good. A high \"used\" number is normal: macOS keeps spare memory busy as a file cache and hands it back instantly when an app needs it."
+        let swapGB = String(format: "%.1f", Double(m.swapUsed) / 1_073_741_824)
+        if m.pressure >= 4 { return "Your Mac is out of memory and swapping \(swapGB) GB to disk — that's the slowness. Free RAM helps a little; quitting or relaunching the biggest app below helps a lot." }
+        if m.pressure >= 2 || m.swapUsed > 4 << 30 { return "Memory is tight: \(swapGB) GB is parked in swap. Relaunch or quit one of the big apps below to get it back." }
+        return "All good. Wired memory and the file cache make a 16 GB Mac sit around 50–70% in use — that's the baseline, not a problem."
     }
+
+    var apps: [AppUsage] { monitor.apps.filter(\.isApp) }
+    var candidates: [AppUsage] { monitor.apps.filter(RAMFree.isRelaunchCandidate).prefix(4).map { $0 } }
 
     var body: some View {
         VStack(spacing: 0) {
-            Header(module: .memory, text: "What's really using your RAM, and what actually helps.")
+            Header(module: .memory, text: "Free RAM, relaunch apps that have grown, and quit what you don't need.")
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     HStack {
                         PressureBadge(m: monitor.mem)
                         Spacer()
-                        Text("Used \(Fmt.mem(monitor.mem.used)) of \(Fmt.mem(monitor.mem.total)) · Swap \(Fmt.mem(monitor.mem.swapUsed)) of \(Fmt.mem(monitor.mem.swapTotal))")
+                        Text("In use \(Fmt.mem(monitor.mem.used)) of \(Fmt.mem(monitor.mem.total)) · Swap \(Fmt.mem(monitor.mem.swapUsed))")
                             .monospacedDigit().foregroundStyle(.secondary)
                     }
-                    MemoryBar(m: monitor.mem)
+                    MemoryBar(m: monitor.mem, captions: true)
                     Text(advice).fixedSize(horizontal: false, vertical: true)
 
-                    GroupBox("Biggest memory users") {
-                        VStack(alignment: .leading, spacing: 8) {
-                            AppUsageList(limit: 12)
-                            Text("Each app is counted with all its helper processes (a browser's tabs, an Electron app's renderers), including the part macOS compressed or moved to swap — so these can add up to more than the RAM in use right now.")
-                                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                        }.padding(4)
+                    GroupBox { FreeRAMBox().padding(4).frame(maxWidth: .infinity, alignment: .leading) } label: {
+                        Text("Free RAM").bold()
                     }
 
-                    GroupBox("Free up RAM") {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Runs macOS's own `purge`: it empties the file cache (the green part). It does **not** shrink apps, and macOS refills the cache soon. Use it before a heavy render or export; quitting a big app frees far more.")
-                                .font(.callout).fixedSize(horizontal: false, vertical: true)
-                            HStack {
-                                Button(helper.busy == .purgeRAM ? "Working…" : "Free up RAM") { purge() }.disabled(helper.busy != nil)
-                                if let purgeNote { Text(purgeNote).font(.caption).foregroundStyle(.secondary) }
+                    if !candidates.isEmpty {
+                        GroupBox {
+                            VStack(alignment: .leading, spacing: 10) {
+                                ForEach(candidates) { a in
+                                    HStack(alignment: .top) {
+                                        AppIcon(pid: a.pid)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("\(a.name) — \(Fmt.mem(a.memory))").bold()
+                                            if let tip = RAMFree.tip(for: a) { Text(tip).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+                                        }
+                                        Spacer()
+                                        Button("Relaunch") { monitor.relaunch(a) }
+                                    }
+                                }
+                                Text("Relaunch quits the app normally (it saves or asks first) and opens it again. Browsers bring your tabs back if \"Continue where you left off\" is on; tabs then load only when you click them.")
+                                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            }.padding(4)
+                        } label: { Text("Relaunch apps that have grown").bold() }
+                    }
+
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(apps) { a in
+                                HStack {
+                                    Toggle("", isOn: Binding(get: { picked.contains(a.pid) }, set: { if $0 { picked.insert(a.pid) } else { picked.remove(a.pid) } }))
+                                        .labelsHidden().toggleStyle(.checkbox)
+                                    AppIcon(pid: a.pid)
+                                    Text(a.name).lineLimit(1)
+                                    if a.processes > 1 { Text("\(a.processes) processes").font(.caption2).foregroundStyle(.secondary) }
+                                    Spacer()
+                                    Text(Fmt.mem(a.memory)).monospacedDigit()
+                                }
                             }
-                        }.frame(maxWidth: .infinity, alignment: .leading).padding(4)
-                    }
-
-                    GroupBox("How to read this") {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("• **Pressure** is the number that matters. Green: fine. Yellow: macOS is compressing. Red: it's swapping to disk and things slow down.")
-                            Text("• **Swap** is app memory parked on the SSD. A few GB that stays put is OK; if it keeps growing, you need fewer apps open (or more RAM).")
-                            Text("• **Cached files** are free memory in disguise. \"Cleaners\" that show big \"freed GB\" numbers are mostly emptying this.")
-                        }.font(.callout).frame(maxWidth: .infinity, alignment: .leading).padding(4)
-                    }
+                            HStack {
+                                Text("Memory = what the app and all its helper processes hold, the same number Activity Monitor shows. Part of it can be compressed or in swap, so one app can hold more than is in RAM right now.")
+                                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                                Spacer()
+                                Button("Force Quit") { quit(force: true) }.disabled(picked.isEmpty)
+                                Button("Quit selected") { quit(force: false) }.buttonStyle(.borderedProminent).disabled(picked.isEmpty)
+                            }.padding(.top, 6)
+                        }.padding(4)
+                    } label: { Text("Open apps").bold() }
                 }
                 .padding(20)
             }
         }
     }
 
-    func purge() {
-        before = monitor.mem
-        helper.run(.purgeRAM) { r in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                monitor.refresh()
-                guard let b = before, r.ok else { purgeNote = r.message; return }
-                let a = monitor.mem
-                let released = Int64(b.cached) - Int64(a.cached)
-                purgeNote = "File cache released: \(Fmt.mem(UInt64(max(0, released)))). Pressure \(b.pressureLabel) → \(a.pressureLabel). App memory unchanged."
-            }
+    func quit(force: Bool) {
+        for a in apps where picked.contains(a.pid) { monitor.quit(a, force: force) }
+        picked = []
+    }
+}
+
+struct AppIcon: View {
+    let pid: pid_t
+    var size: CGFloat = 18
+    var body: some View {
+        if let icon = NSRunningApplication(processIdentifier: pid)?.icon {
+            Image(nsImage: icon).resizable().frame(width: size, height: size)
+        } else {
+            Image(systemName: "gearshape").frame(width: size, height: size).foregroundStyle(.secondary)
         }
     }
 }
@@ -127,11 +185,7 @@ struct AppUsageList: View {
         VStack(spacing: compact ? 4 : 6) {
             ForEach(rows) { a in
                 HStack(spacing: 8) {
-                    if let app = NSRunningApplication(processIdentifier: a.pid), let icon = app.icon {
-                        Image(nsImage: icon).resizable().frame(width: 18, height: 18)
-                    } else {
-                        Image(systemName: "gearshape").frame(width: 18, height: 18).foregroundStyle(.secondary)
-                    }
+                    AppIcon(pid: a.pid)
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
                             Text(a.name).lineLimit(1)
@@ -181,7 +235,7 @@ struct OptimizationView: View {
                                         Text((it.program ?? "—") + " · " + it.signer).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                                     }
                                     Spacer()
-                                    if scope == .user && it.plist.lastPathComponent != LoginItem.label + ".plist" {
+                                    if scope == .user && it.plist.lastPathComponent != "com.ismailx.maccleaner.app.plist" {
                                         let off = disabled.contains(it.label)
                                         Toggle(off ? "Off" : "On", isOn: Binding(get: { !off }, set: { on in
                                             _ = on ? LoginItems.enable(it) : LoginItems.disable(it); reload()
@@ -359,8 +413,8 @@ struct SettingsView: View {
                 Toggle("Move junk to the Trash instead of deleting it", isOn: $prefs.junkToTrash)
             }
             Section("Menu bar") {
-                Toggle("Show RAM % in the menu bar", isOn: $prefs.showPercentInMenuBar)
                 Toggle("Open at login (menu bar only)", isOn: $prefs.launchAtLogin)
+                Toggle("Free RAM automatically when memory pressure turns yellow (purge + background services, max every 30 min; never quits apps)", isOn: $prefs.autoFreeRAM)
             }
             Section("Helper") {
                 LabeledContent("Root helper", value: helper.alive ? "Running (v\(helper.status.version))" : "Not installed")

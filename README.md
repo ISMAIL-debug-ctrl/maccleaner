@@ -22,15 +22,21 @@ Mac cleaners cost a subscription and often show big "freed GB" numbers that don'
 | **Space Lens** | Interactive treemap of what uses your disk. Click to drill down |
 | **Uninstaller** | Removes an app plus its caches, preferences, containers and support files, or resets an app by removing only its data |
 | **Updater** | Lists outdated apps from the App Store, Sparkle feeds and Homebrew casks |
-| **Memory** | Real memory pressure, swap, compressed memory and the apps (with all their helper processes) that use the most, each with a Quit button |
+| **Memory** | **Free RAM** (purge + stop restartable background services, with an honest before → after), **relaunch apps that have grown** (browsers, Electron apps, Finder), and a list of open apps to quit or force quit. Shows pressure, swap, and which part of memory can't be freed (wired) or frees itself (file cache). Optional auto mode when pressure turns yellow |
 | **Optimization** | Launch agents (turn yours off and on again), heavy CPU and memory consumers, and a shortcut to Login Items |
 | **Maintenance** | Free up RAM (purge), flush DNS, thin Time Machine local snapshots, run maintenance scripts, reindex Spotlight, repair home-folder permissions, rebuild Launch Services |
 | **Privacy** | Browser history, cookies, autofill data and caches for Safari, Chrome, Brave, Edge, Arc, Vivaldi, Opera and Firefox, plus the Recent Items list. Opt-in only |
 | **Protection** | Flags launch agents and daemons that are unsigned, ad-hoc signed, run from hidden or temp folders, run scripts, or were added this week. Lists browser extensions and highlights the ones that can read every website |
-| **Menu bar** | Live RAM %, memory pressure, swap, CPU, free disk space, top memory apps with one-click Quit, and a Free up RAM button |
+| **Menu bar** | A mini MacCleaner behind the app's own icon: Memory (Free RAM, top apps with Quit, relaunch), Cleanup (quick clean of caches and Trash), CPU (busiest apps) and Storage (free space and shortcuts) |
 
-## About "Free up RAM"
-MacCleaner doesn't show fake numbers. Free up RAM runs macOS's own `purge`, which empties the *file cache*. That memory was already free to reuse, and macOS fills it again soon. It helps right before a heavy render or export. When your Mac is slow because memory pressure is yellow or red and swap keeps growing, the only real fix is to quit what's using the memory. The Memory view and the menu bar show exactly which apps those are, counting all their helper processes: a browser with many tabs, or Electron apps like Notion, Slack and Discord.
+## About "Free RAM"
+MacCleaner doesn't show fake numbers. Free RAM does only the things that actually give memory back, then measures again and shows what really changed:
+1. **purge** empties the inactive file cache (needs the helper, or your password).
+2. **Background services** like Photos and Spotlight analysis (`mediaanalysisd`, `photoanalysisd`, `mdworker_shared`…) are stopped when they've grown. macOS restarts them later, smaller.
+3. **Relaunch apps that have grown**: a browser, an Electron app (Notion, Slack, Discord, Claude…) or Finder gives back everything when it restarts. Relaunch quits it normally (it saves or asks first) and opens it again. Browsers bring your tabs back if "Continue where you left off" is on. For Chromium browsers MacCleaner also points you at the heavy tab (Shift+Esc) and Memory Saver.
+4. **Quit what you don't need** from the open-apps list.
+
+Each app's number is its *footprint*, the same as Activity Monitor's Memory column, counted with all its helper processes. Part of it can be compressed or in swap, so one app can hold more than is in RAM right now. That's exactly why swap grows. Wired memory (macOS itself) can't be freed, and the file cache frees itself, so a 16 GB Mac sitting around 50–70% in use is normal.
 
 ## Safety
 - **Whitelist only.** Junk cleaning only removes things *inside* a fixed list of cache and log folders. Those folders are kept. Nothing outside the list is ever touched automatically.
@@ -53,7 +59,8 @@ cd maccleaner
 ```
 - The installer builds the app, copies it to `/Applications`, and asks for your password **once** to install the small root helper. You can skip the helper with `./install.sh --no-helper`. Maintenance tasks then ask for your password each time, and system-wide junk is skipped.
 - Then open **System Settings ▸ Privacy & Security ▸ Full Disk Access** and turn on **MacCleaner**. It needs this to see the Trash, Mail and Safari data. After an update you may need to turn it off and on again, because the app is built locally and has no paid Apple signature.
-- To open MacCleaner at login (menu bar only), use **Settings ▸ Open at login** in the app.
+- To open MacCleaner at login (menu bar only), use **Settings ▸ Open at login** in the app. It is then listed in System Settings ▸ General ▸ Login Items.
+- Closing the window keeps MacCleaner in the menu bar (the Dock icon hides). Quit it from the menu bar panel.
 
 ## Update
 When an update is out, the app shows **Update now** (in Settings and in the menu bar panel). You can also run:
@@ -105,14 +112,15 @@ MacCleaner is an independent project and is not affiliated with MacPaw or CleanM
 - **الملفات الكبيرة والقديمة** و**المكررات** (نفس الملف بالضبط، أو صور متشابهة).
 - **خريطة المساحة** (Space Lens): تشوف وش ماخذ مساحة جهازك، وتضغط على أي مجلد وتدخل فيه.
 - **إزالة البرامج** مع كل ملفاتها، و**قائمة البرامج اللي لها تحديث**.
-- **الرام**: يوريك ضغط الذاكرة الحقيقي والـ Swap، ويوريك أي برنامج ماكل الرام (مع كل العمليات المساعدة حقته)، وجنب كل برنامج زر إغلاق.
+- **الرام**: زر **تفريغ الرام** (purge + إيقاف خدمات الخلفية اللي ترجع لحالها) ويوريك قبل/بعد بصدق، و**إعادة تشغيل البرامج اللي كبرت** (المتصفح، برامج Electron، Finder)، وقائمة البرامج المفتوحة مع إغلاق وإغلاق إجباري.
 - **الصيانة**: تفريغ الرام (purge)، تنظيف كاش الـ DNS، حذف لقطات Time Machine المحلية، إعادة فهرسة Spotlight، إصلاح صلاحيات مجلدك.
 - **الخصوصية**: سجل المتصفحات والكوكيز. ما يتحدد أي شي إلا إذا أنت اخترته.
 - **الحماية**: يوريك البرامج اللي تشتغل لحالها وهي غير موقّعة أو من مجلدات مخفية، وإضافات المتصفح اللي تقدر تقرا كل المواقع.
-- **شريط القوائم**: نسبة الرام، ضغط الذاكرة، السواب، المعالج، المساحة الفاضية، وأكثر البرامج أكلاً للرام مع زر إغلاق.
+- **شريط القوائم**: أيقونة البرنامج، وتفتح لك نسخة مصغّرة من MacCleaner فيها: الرام، التنظيف السريع، المعالج، والتخزين.
+- إذا سكّرت النافذة يبقى البرنامج شغال في شريط القوائم، وتقدر تخليه يفتح مع تشغيل الجهاز من الإعدادات.
 
 ### عن زر "تفريغ الرام"
-ما نعطيك أرقام وهمية. الزر يشغّل أمر `purge` حق macOS، وهذا يفرّغ كاش الملفات بس، وهو أصلاً ذاكرة فاضية والنظام يرجع يعبيها. ينفع قبل رندر أو تصدير ثقيل. لكن إذا الجهاز ثقيل والضغط أصفر أو أحمر والسواب يكبر، الحل الحقيقي إنك تقفل البرنامج اللي ماكل الرام. شاشة الرام وشريط القوائم يوورونك هو أي برنامج بالضبط.
+ما نعطيك أرقام وهمية. الزر يسوي بس الأشياء اللي فعلاً ترجع رام: يفرّغ كاش الملفات، ويوقف خدمات الخلفية الكبيرة (تحليل الصور وSpotlight، وترجع لحالها بحجم أصغر). وبعدها يقيس مرة ثانية ويوريك وش تغيّر بالضبط. وأكبر فرق تحصّله من **إعادة تشغيل** البرنامج اللي كبر (المتصفح أو Notion أو Finder)، أو إنك تقفل البرنامج اللي ما تحتاجه. الجزء "Wired" هو النظام نفسه وما ينفرغ، وكاش الملفات يفرّغ نفسه، فطبيعي جهاز 16 جيجا يكون مستخدم 50–70%.
 
 ### الأمان
 - التنظيف من **قائمة مجلدات محددة** بس (كاش ولوقات). المجلدات نفسها تبقى، ويُمسح اللي داخلها بس.
