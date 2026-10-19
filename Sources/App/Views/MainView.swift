@@ -80,12 +80,6 @@ struct MainView: View {
         }
         .onAppear {
             fdaGranted = FullDiskAccess.granted
-            // Test hook, only when launched with --test-hooks: lets scripts switch sections to check the layout.
-            if CommandLine.arguments.contains("--test-hooks") {
-                DistributedNotificationCenter.default().addObserver(forName: .init("com.ismailx.maccleaner.test.open"), object: nil, queue: .main) { n in
-                    if let name = n.object as? String, let m = Module(rawValue: name) { selection = m }
-                }
-            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             fdaGranted = FullDiskAccess.granted

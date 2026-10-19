@@ -9,7 +9,6 @@ struct MonitorPanel: View {
     }
     @EnvironmentObject var monitor: Monitor
     @EnvironmentObject var updater: Updater
-    @Environment(\.openWindow) var openWindow
     @AppStorage("panelTab") private var tab: Tab = .memory
 
     var body: some View {
@@ -49,14 +48,7 @@ struct MonitorPanel: View {
         .frame(width: 360)
     }
 
-    func open(_ module: Module?) {
-        NSApp.setActivationPolicy(.regular)
-        openWindow(id: "main")
-        NSApp.activate(ignoringOtherApps: true)
-        if let module {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NotificationCenter.default.post(name: .openModule, object: module) }
-        }
-    }
+    func open(_ module: Module?) { MainWindow.open(module) }
 }
 
 private struct MemoryTab: View {

@@ -33,7 +33,7 @@ struct MacCleanerApp: App {
             MonitorPanel()
                 .environmentObject(monitor).environmentObject(helper).environmentObject(updater).environmentObject(prefs)
         } label: {
-            Image(nsImage: glyph)   // the app's own mark, template so it follows light/dark
+            MenuLabel(glyph: glyph)   // the app's own mark, template so it follows light/dark
         }
         .menuBarExtraStyle(.window)
     }
@@ -61,10 +61,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if !NSApp.windows.contains(where: { Self.isMain($0) && $0.isVisible && $0 !== w }) { NSApp.setActivationPolicy(.accessory) }
             }
         }
-        nc.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { n in
-            guard let w = n.object as? NSWindow, Self.isMain(w), NSApp.activationPolicy() != .regular else { return }
-            NSApp.setActivationPolicy(.regular)
-        }
+        // The Dock icon comes back in MainWindow.open(), *before* the window shows. Flipping the activation
+        // policy while the window is on screen makes AppKit rebuild the title bar and shift the content.
+        if CommandLine.arguments.contains("--test-hooks") { TestHooks.install() }
         if launchedAtLogin {
             DispatchQueue.main.async {
                 for w in NSApp.windows where Self.isMain(w) { w.close() }
@@ -75,7 +74,88 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     static func isMain(_ w: NSWindow) -> Bool { w.title == "MacCleaner" && !(w is NSPanel) && w.styleMask.contains(.titled) }
 
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { true }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag { MainWindow.open() }
+        return !flag
+    }
+}
+
+/// One way to open the main window, used by the menu bar panel, Dock reopen and the test hooks.
+enum MainWindow {
+    static let request = Notification.Name("MacCleaner.openMainWindow")
+
+    static func open(_ module: Module? = nil) {
+        if NSApp.activationPolicy() != .regular { NSApp.setActivationPolicy(.regular) }
+        NotificationCenter.default.post(name: request, object: module)
+    }
+}
+
+/// The menu bar icon. It is always alive, so it owns `openWindow` for everyone else.
+struct MenuLabel: View {
+    let glyph: NSImage
+    @Environment(\.openWindow) private var openWindow
+    var body: some View {
+        Image(nsImage: glyph)
+            .onReceive(NotificationCenter.default.publisher(for: MainWindow.request)) { n in
+                openWindow(id: "main")
+                NSApp.activate(ignoringOtherApps: true)
+                if let m = n.object as? Module {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { NotificationCenter.default.post(name: .openModule, object: m) }
+                }
+            }
+    }
+}
+
+/// Only with --test-hooks: lets a script drive the window (switch, close, reopen, scroll, resize) to check
+/// the layout, since UI scripting needs Accessibility permission. Posts are DistributedNotifications.
+enum TestHooks {
+    static func install() {
+        DistributedNotificationCenter.default().addObserver(forName: .init("com.ismailx.maccleaner.test"), object: nil, queue: .main) { n in
+            guard let cmd = n.object as? String else { return }
+            let main = NSApp.windows.first(where: AppDelegate.isMain)
+            let parts = cmd.split(separator: ":", maxSplits: 1).map(String.init)
+            switch parts[0] {
+            case "open": if let m = Module(rawValue: parts.count > 1 ? parts[1] : "") { NotificationCenter.default.post(name: .openModule, object: m) }
+            case "close": main?.performClose(nil)
+            case "reopen": MainWindow.open(parts.count > 1 ? Module(rawValue: parts[1]) : nil)
+            case "size":
+                let n = (parts.count > 1 ? parts[1] : "").split(separator: ",").compactMap { Double($0) }
+                if let w = main, n.count == 2 { var f = w.frame; f.size = NSSize(width: n[0], height: n[1]); w.setFrame(f, display: true, animate: false) }
+            case "scroll":
+                guard let root = main?.contentView else { return }
+                func all(_ v: NSView) -> [NSScrollView] { (v as? NSScrollView).map { [$0] } ?? [] + v.subviews.flatMap(all) }
+                for sv in all(root) {
+                    guard let doc = sv.documentView else { continue }
+                    let y = parts.count > 1 && parts[1] == "top" ? 0 : max(0, doc.bounds.height - sv.contentView.bounds.height)
+                    sv.contentView.scroll(to: NSPoint(x: 0, y: doc.isFlipped ? y : (parts.count > 1 && parts[1] == "top" ? max(0, doc.bounds.height - sv.contentView.bounds.height) : 0)))
+                    sv.reflectScrolledClipView(sv.contentView)
+                }
+            case "snap":
+                // Draws the window's content into a PNG (works even when the window is on another Space).
+                guard let v = main?.contentView, parts.count > 1, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { return }
+                v.cacheDisplay(in: v.bounds, to: rep)
+                try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: NSTemporaryDirectory() + parts[1] + ".png"))
+            case "report":
+                // Writes "OK" or the views that stick out of the window's content area (the glitch signature).
+                var lines: [String] = []
+                if let w = main, let root = w.contentView {
+                    let area = w.contentLayoutRect.insetBy(dx: -1, dy: -1)
+                    func walk(_ v: NSView, _ d: Int) {
+                        guard d < 9, !v.isHidden, v.frame.height > 4 else { return }
+                        let f = v.convert(v.bounds, to: nil)
+                        if v is NSScrollView, !area.contains(f) {
+                            lines.append("\(type(of: v)) \(Int(f.minY))..\(Int(f.maxY)) vs area \(Int(area.minY))..\(Int(area.maxY))")
+                        }
+                        v.subviews.forEach { walk($0, d + 1) }
+                    }
+                    walk(root, 0)
+                    lines.insert("window \(Int(w.frame.width))x\(Int(w.frame.height)) visible=\(w.isVisible) policy=\(NSApp.activationPolicy().rawValue)", at: 0)
+                } else { lines = ["no window"] }
+                try? lines.joined(separator: "\n").write(toFile: NSTemporaryDirectory() + "maccleaner-layout.txt", atomically: true, encoding: .utf8)
+            default: break
+            }
+        }
+    }
 }
 
 @MainActor
