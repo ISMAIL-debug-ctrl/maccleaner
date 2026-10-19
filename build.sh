@@ -19,9 +19,13 @@ $PB -c "Set :CFBundleVersion $(git rev-list --count HEAD 2>/dev/null || echo 1)"
 $PB -c "Add :MacCleanerRepoPath string $PWD" $APP/Info.plist
 # Sign with the local identity from Tools/signing-identity.sh when present (Full Disk Access then
 # survives rebuilds); otherwise ad-hoc.
-SIGN=$(security find-certificate -c "MacCleaner Local Signing" -Z "$HOME/Library/Keychains/login.keychain-db" 2>/dev/null \
-  | awk '/^SHA-1 hash:/ {print $3; exit}')
-SIGN=${SIGN:--}
+# MACCLEANER_ADHOC=1 forces ad-hoc (development builds: no keychain access at all).
+SIGN=-
+if [[ ${MACCLEANER_ADHOC:-0} != 1 ]]; then
+  SIGN=$(security find-certificate -c "MacCleaner Local Signing" -Z "$HOME/Library/Keychains/login.keychain-db" 2>/dev/null \
+    | awk '/^SHA-1 hash:/ {print $3; exit}')
+  SIGN=${SIGN:--}
+fi
 codesign --force --options runtime --sign "$SIGN" build/MacCleaner.app
 codesign --force --options runtime --sign "$SIGN" --identifier com.ismailx.maccleaner.helper build/com.ismailx.maccleaner.helper
 echo "Built: build/MacCleaner.app + build/com.ismailx.maccleaner.helper"

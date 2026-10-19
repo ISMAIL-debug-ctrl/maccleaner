@@ -70,6 +70,14 @@ When an update is out, the app shows **Update now** (in Settings and in the menu
 ```
 Updates only install published releases (`v*` tags on `main`). Your password is only asked again when the helper itself changed. Updating from 1.1 or earlier switches the app to the local signing certificate, so turn Full Disk Access off and on **one last time** after that update.
 
+
+**Password prompts.** You should see only these:
+- **Once**, when installing: the helper (admin password).
+- **Once**, the first time an update signs the app: "codesign wants to access key MacCleaner Local Signing". Click **Always Allow**, not Allow, and it won't ask again.
+- Only when the helper's own code changes (rare, and mentioned in the release notes).
+
+Everything else (Free RAM, flush DNS, system junk, snapshots…) goes through the running helper with no prompt.
+
 ## Uninstall
 ```bash
 ./uninstall.sh
