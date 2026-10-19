@@ -50,23 +50,45 @@ struct MainView: View {
         return .smartScan
     }()
     @EnvironmentObject var helper: HelperClient
+    @State private var fdaGranted = true
 
     var body: some View {
-        NavigationSplitView {
-            List(selection: $selection) {
-                ForEach(Module.groups, id: \.1.first!.id) { title, mods in
-                    Section(title) {
-                        ForEach(mods) { m in Label(m.rawValue, systemImage: m.icon).tag(m) }
+        // A plain sidebar + detail layout. NavigationSplitView sized itself to each module's ideal height
+        // (up to 2700 pt), so the window content jumped and got cut off when switching sections.
+        GeometryReader { g in
+            HStack(spacing: 0) {
+                List(selection: $selection) {
+                    ForEach(Module.groups, id: \.1.first!.id) { title, mods in
+                        Section(title) {
+                            ForEach(mods) { m in Label(m.rawValue, systemImage: m.icon).tag(m) }
+                        }
                     }
                 }
+                .listStyle(.sidebar)
+                .frame(width: 220)
+                Divider()
+                VStack(spacing: 0) {
+                    if !fdaGranted { FDABanner() }
+                    detail(selection ?? .smartScan)
+                        .id(selection)   // fresh state per module (Trash, Mail and Privacy share one view type)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .frame(width: max(0, g.size.width - 221), height: g.size.height)
+                .clipped()
             }
-            .navigationSplitViewColumnWidth(min: 200, ideal: 220)
-        } detail: {
-            VStack(spacing: 0) {
-                if !FullDiskAccess.granted { FDABanner() }
-                detail(selection ?? .smartScan)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(width: g.size.width, height: g.size.height)
+        }
+        .onAppear {
+            fdaGranted = FullDiskAccess.granted
+            // Test hook, only when launched with --test-hooks: lets scripts switch sections to check the layout.
+            if CommandLine.arguments.contains("--test-hooks") {
+                DistributedNotificationCenter.default().addObserver(forName: .init("com.ismailx.maccleaner.test.open"), object: nil, queue: .main) { n in
+                    if let name = n.object as? String, let m = Module(rawValue: name) { selection = m }
+                }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            fdaGranted = FullDiskAccess.granted
         }
         .onReceive(NotificationCenter.default.publisher(for: .openModule)) { n in
             if let m = n.object as? Module { selection = m }

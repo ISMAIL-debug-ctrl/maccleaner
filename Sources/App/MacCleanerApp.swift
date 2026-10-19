@@ -22,9 +22,12 @@ struct MacCleanerApp: App {
         Window("MacCleaner", id: "main") {
             MainView()
                 .environmentObject(monitor).environmentObject(helper).environmentObject(updater).environmentObject(prefs)
-                .frame(minWidth: 920, minHeight: 600)
+                // Fill exactly the window. Without maxHeight the split view grew to its content's ideal height
+                // (1400+ pt) and the window centred it, cutting the header and sidebar off at the top.
+                .frame(minWidth: 920, maxWidth: .infinity, minHeight: 600, maxHeight: .infinity)
         }
         .defaultSize(width: 1080, height: 700)
+        .windowResizability(.contentMinSize)
 
         MenuBarExtra {
             MonitorPanel()

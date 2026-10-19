@@ -7,6 +7,7 @@ enum Protection {
     static let suspiciousDirs = ["/tmp/", "/private/tmp/", "/var/tmp/", "/private/var/tmp/", "/Users/Shared/"]
 
     static func flags(for item: LaunchItem) -> [String] {
+        if item.label.hasPrefix("com.ismailx.maccleaner.") { return [] }  // our own helper / login item
         var f: [String] = []
         guard let prog = item.program else { return ["No program"] }
         if !item.programExists { f.append("Program is missing") }
